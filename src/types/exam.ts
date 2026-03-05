@@ -36,10 +36,29 @@ export interface Allocation {
   squad_number?: number;
 }
 
-export interface AllocationResult {
-  juniorSupervisors: { block: number; faculty: Faculty }[];
+export interface TimetableSession {
+  exam_date: string;
+  session: string;
+  subject: string;
+  student_count: number;
+  pwd_students: number;
+  normal_blocks: number;
+  pwd_blocks: number;
+  total_blocks: number;
+}
+
+export interface SessionAllocationResult {
+  exam_date: string;
+  session: string;
+  subject: string;
+  totalBlocks: number;
+  juniorSupervisors: { block: number; faculty: Faculty; isPwd: boolean }[];
   substituteJrSV: Faculty[];
   seniorSupervisors: Faculty[];
   squads: { squad: number; members: Faculty[] }[];
+}
+
+export interface AllocationResult {
+  sessions: SessionAllocationResult[];
   unallocated: Faculty[];
 }

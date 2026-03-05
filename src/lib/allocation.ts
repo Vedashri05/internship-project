@@ -1,4 +1,4 @@
-import { Faculty, FairnessCounter, AllocationResult } from '@/types/exam';
+import { Faculty, FairnessCounter, AllocationResult, SessionAllocationResult, TimetableSession } from '@/types/exam';
 
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -41,19 +41,22 @@ function isJrSVEligible(f: Faculty): boolean {
   return false;
 }
 
-export function runAllocation(
-  faculties: Faculty[],
-  totalStudents: number,
+function runSessionAllocation(
+  activeFaculty: Faculty[],
+  session: TimetableSession,
   counters: Map<string, FairnessCounter>,
-  currentTerm: string
-): AllocationResult {
-  const activeFaculty = faculties.filter(f => f.active_status);
-  const totalBlocks = Math.ceil(totalStudents / 36);
-  const allocated = new Set<string>();
+  currentTerm: string,
+  globalAllocated: Set<string>
+): SessionAllocationResult {
+  const totalBlocks = session.total_blocks;
+  const normalBlocks = session.normal_blocks;
+  const pwdBlocks = session.pwd_blocks;
+  const totalStudents = session.student_count + session.pwd_students;
+  const allocated = new Set<string>(globalAllocated);
 
   // --- Senior Supervisors ---
   const srSVRequired = totalStudents < 800 ? 1 : 2;
-  const srEligible = activeFaculty.filter(f => isSrSVEligible(f));
+  const srEligible = activeFaculty.filter(f => isSrSVEligible(f) && !allocated.has(f.faculty_id));
   const srSorted = shuffleArray(srEligible).sort((a, b) => {
     const ca = getCounter(counters, a.faculty_id);
     const cb = getCounter(counters, b.faculty_id);
@@ -76,7 +79,6 @@ export function runAllocation(
   // --- Junior Supervisors ---
   const jrEligible = activeFaculty.filter(f => isJrSVEligible(f) && !allocated.has(f.faculty_id));
   const jrSorted = shuffleArray(jrEligible).sort((a, b) => {
-    // Teaching first
     if (a.teaching_type !== b.teaching_type) {
       return a.teaching_type === 'Teaching' ? -1 : 1;
     }
@@ -87,13 +89,25 @@ export function runAllocation(
     return 0;
   });
 
-  const juniorSupervisors: { block: number; faculty: Faculty }[] = [];
+  const juniorSupervisors: { block: number; faculty: Faculty; isPwd: boolean }[] = [];
   const substituteJrSV: Faculty[] = [];
   let jrIdx = 0;
 
-  for (let block = 1; block <= totalBlocks && jrIdx < jrSorted.length; block++) {
+  // Normal blocks first
+  for (let block = 1; block <= normalBlocks && jrIdx < jrSorted.length; block++) {
     const f = jrSorted[jrIdx++];
-    juniorSupervisors.push({ block, faculty: f });
+    juniorSupervisors.push({ block, faculty: f, isPwd: false });
+    allocated.add(f.faculty_id);
+    const c = getCounter(counters, f.faculty_id);
+    c.jr_sv_count += 1;
+    c.total_allocations += 1;
+    c.last_allocated_term = currentTerm;
+  }
+
+  // PwD blocks
+  for (let block = normalBlocks + 1; block <= totalBlocks && jrIdx < jrSorted.length; block++) {
+    const f = jrSorted[jrIdx++];
+    juniorSupervisors.push({ block, faculty: f, isPwd: true });
     allocated.add(f.faculty_id);
     const c = getCounter(counters, f.faculty_id);
     c.jr_sv_count += 1;
@@ -130,21 +144,18 @@ export function runAllocation(
     const members: Faculty[] = [];
     const remaining = squadSorted.filter(f => !usedForSquad.has(f.faculty_id));
 
-    // Try to pick 1 female
     const female = remaining.find(f => f.gender.toLowerCase() === 'female');
     if (female) {
       members.push(female);
       usedForSquad.add(female.faculty_id);
     }
 
-    // Try to pick 1 high-experience (>10 years)
     const highExp = remaining.find(f => !usedForSquad.has(f.faculty_id) && f.experience_years >= 10);
     if (highExp) {
       members.push(highExp);
       usedForSquad.add(highExp.faculty_id);
     }
 
-    // Fill remaining to 3
     for (const f of remaining) {
       if (members.length >= 3) break;
       if (!usedForSquad.has(f.faculty_id)) {
@@ -165,8 +176,37 @@ export function runAllocation(
     }
   }
 
-  // --- Unallocated ---
-  const unallocated = activeFaculty.filter(f => !allocated.has(f.faculty_id));
+  // Update global allocated set
+  allocated.forEach(id => globalAllocated.add(id));
 
-  return { juniorSupervisors, substituteJrSV, seniorSupervisors, squads, unallocated };
+  return {
+    exam_date: session.exam_date,
+    session: session.session,
+    subject: session.subject,
+    totalBlocks,
+    juniorSupervisors,
+    substituteJrSV,
+    seniorSupervisors,
+    squads,
+  };
+}
+
+export function runAllocation(
+  faculties: Faculty[],
+  timetableSessions: TimetableSession[],
+  counters: Map<string, FairnessCounter>,
+  currentTerm: string
+): AllocationResult {
+  const activeFaculty = faculties.filter(f => f.active_status);
+  const globalAllocated = new Set<string>();
+  const sessions: SessionAllocationResult[] = [];
+
+  for (const session of timetableSessions) {
+    const result = runSessionAllocation(activeFaculty, session, counters, currentTerm, globalAllocated);
+    sessions.push(result);
+  }
+
+  const unallocated = activeFaculty.filter(f => !globalAllocated.has(f.faculty_id));
+
+  return { sessions, unallocated };
 }
