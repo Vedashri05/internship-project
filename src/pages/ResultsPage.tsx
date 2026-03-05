@@ -22,33 +22,58 @@ export default function ResultsPage() {
     );
   }
 
-  const { juniorSupervisors, substituteJrSV, seniorSupervisors, squads, unallocated } = allocationResult;
+  const { sessions, unallocated } = allocationResult;
+
+  const totalJrSV = sessions.reduce((s, r) => s + r.juniorSupervisors.length, 0);
+  const totalSrSV = sessions.reduce((s, r) => s + r.seniorSupervisors.length, 0);
+  const totalSquadMembers = sessions.reduce((s, r) => s + r.squads.reduce((a, sq) => a + sq.members.length, 0), 0);
 
   const downloadExcel = () => {
     const wb = XLSX.utils.book_new();
 
-    // Sheet 1 - Jr SV
-    const jrData = juniorSupervisors.map(j => ({ Block: j.block, 'Faculty Name': j.faculty.name }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(jrData), 'Junior Supervisors');
+    // Sheet 1 — Session-wise Jr SV Allocation
+    const jrData = sessions.flatMap(s =>
+      s.juniorSupervisors.map(j => ({
+        Date: s.exam_date,
+        Session: s.session,
+        Subject: s.subject,
+        Block: j.block,
+        'Block Type': j.isPwd ? 'PwD' : 'Normal',
+        Role: 'Jr SV',
+        'Faculty Name': j.faculty.name,
+        Department: j.faculty.department,
+      }))
+    );
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(jrData), 'Session-wise Allocation');
 
-    // Sheet 2 - Substitute Jr SV
-    const subData = substituteJrSV.map(f => ({ 'Faculty Name': f.name }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(subData), 'Substitute Jr SV');
-
-    // Sheet 3 - Sr SV
-    const srData = seniorSupervisors.map(f => ({ 'Faculty Name': f.name }));
+    // Sheet 2 — Senior Supervisors
+    const srData = sessions.flatMap(s =>
+      s.seniorSupervisors.map(f => ({
+        Date: s.exam_date,
+        Session: s.session,
+        'Faculty Name': f.name,
+        Designation: f.designation,
+        Experience: f.experience_years,
+      }))
+    );
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(srData), 'Senior Supervisors');
 
-    // Sheet 4 - Squads
-    const sqData = squads.map(s => {
-      const row: any = { Squad: s.squad };
-      s.members.forEach((m, i) => { row[`Member${i + 1}`] = m.name; });
-      return row;
-    });
+    // Sheet 3 — Squads
+    const sqData = sessions.flatMap(s =>
+      s.squads.flatMap(sq =>
+        sq.members.map((m, i) => ({
+          Date: s.exam_date,
+          Session: s.session,
+          Squad: sq.squad,
+          [`Member`]: m.name,
+          Role: i === 0 ? 'Lead' : 'Member',
+        }))
+      )
+    );
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sqData), 'Squads');
 
-    // Sheet 5 - Unallocated
-    const unData = unallocated.map(f => ({ 'Faculty Name': f.name }));
+    // Sheet 4 — Unallocated
+    const unData = unallocated.map(f => ({ 'Faculty Name': f.name, Department: f.department, Designation: f.designation }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unData), 'Unallocated Faculty');
 
     XLSX.writeFile(wb, 'Exam_Duty_Allocation.xlsx');
@@ -60,99 +85,112 @@ export default function ResultsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground">Allocation Results</h1>
-          <p className="text-sm text-muted-foreground mt-1">Review and download duty allocation</p>
+          <p className="text-sm text-muted-foreground mt-1">{sessions.length} session(s) allocated</p>
         </div>
         <Button onClick={downloadExcel}>
           <Download className="w-4 h-4 mr-2" /> Download Excel
         </Button>
       </div>
 
-      <Tabs defaultValue="jr-sv">
-        <TabsList className="grid grid-cols-5 w-full max-w-2xl">
-          <TabsTrigger value="jr-sv">Jr SV ({juniorSupervisors.length})</TabsTrigger>
-          <TabsTrigger value="sub-jr">Subs ({substituteJrSV.length})</TabsTrigger>
-          <TabsTrigger value="sr-sv">Sr SV ({seniorSupervisors.length})</TabsTrigger>
-          <TabsTrigger value="squads">Squads ({squads.length})</TabsTrigger>
+      <Tabs defaultValue="sessions">
+        <TabsList className="grid grid-cols-4 w-full max-w-2xl">
+          <TabsTrigger value="sessions">Jr SV ({totalJrSV})</TabsTrigger>
+          <TabsTrigger value="sr-sv">Sr SV ({totalSrSV})</TabsTrigger>
+          <TabsTrigger value="squads">Squads ({totalSquadMembers})</TabsTrigger>
           <TabsTrigger value="unalloc">Unalloc ({unallocated.length})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="jr-sv" className="glass-card rounded-xl overflow-hidden mt-4">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Block</TableHead>
-                <TableHead>Faculty Name</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Type</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {juniorSupervisors.map(j => (
-                <TableRow key={j.block}>
-                  <TableCell className="font-bold">{j.block}</TableCell>
-                  <TableCell>{j.faculty.name}</TableCell>
-                  <TableCell>{j.faculty.department}</TableCell>
-                  <TableCell>{j.faculty.teaching_type}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TabsContent>
-
-        <TabsContent value="sub-jr" className="glass-card rounded-xl overflow-hidden mt-4">
-          <Table>
-            <TableHeader>
-              <TableRow><TableHead>Faculty Name</TableHead><TableHead>Department</TableHead></TableRow>
-            </TableHeader>
-            <TableBody>
-              {substituteJrSV.map(f => (
-                <TableRow key={f.faculty_id}>
-                  <TableCell>{f.name}</TableCell>
-                  <TableCell>{f.department}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TabsContent>
-
-        <TabsContent value="sr-sv" className="glass-card rounded-xl overflow-hidden mt-4">
-          <Table>
-            <TableHeader>
-              <TableRow><TableHead>Faculty Name</TableHead><TableHead>Designation</TableHead><TableHead>Experience</TableHead></TableRow>
-            </TableHeader>
-            <TableBody>
-              {seniorSupervisors.map(f => (
-                <TableRow key={f.faculty_id}>
-                  <TableCell>{f.name}</TableCell>
-                  <TableCell>{f.designation}</TableCell>
-                  <TableCell>{f.experience_years} yrs</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TabsContent>
-
-        <TabsContent value="squads" className="glass-card rounded-xl overflow-hidden mt-4">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Squad</TableHead>
-                <TableHead>Member 1</TableHead>
-                <TableHead>Member 2</TableHead>
-                <TableHead>Member 3</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {squads.map(s => (
-                <TableRow key={s.squad}>
-                  <TableCell className="font-bold">{s.squad}</TableCell>
-                  {[0, 1, 2].map(i => (
-                    <TableCell key={i}>{s.members[i]?.name || '—'}</TableCell>
+        <TabsContent value="sessions" className="space-y-4 mt-4">
+          {sessions.map((s, si) => (
+            <div key={si} className="glass-card rounded-xl overflow-hidden">
+              <div className="p-3 border-b border-border bg-muted/30">
+                <span className="font-semibold">{s.exam_date} — {s.session}</span>
+                <span className="text-muted-foreground ml-2 text-sm">({s.subject}, {s.totalBlocks} blocks)</span>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Block</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Faculty Name</TableHead>
+                    <TableHead>Department</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {s.juniorSupervisors.map(j => (
+                    <TableRow key={j.block}>
+                      <TableCell className="font-bold">{j.block}</TableCell>
+                      <TableCell>{j.isPwd ? <span className="text-warning font-medium">PwD</span> : 'Normal'}</TableCell>
+                      <TableCell>{j.faculty.name}</TableCell>
+                      <TableCell>{j.faculty.department}</TableCell>
+                    </TableRow>
                   ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  {s.substituteJrSV.length > 0 && s.substituteJrSV.map((f, i) => (
+                    <TableRow key={`sub-${i}`} className="bg-muted/20">
+                      <TableCell className="italic text-muted-foreground">Sub {i + 1}</TableCell>
+                      <TableCell>—</TableCell>
+                      <TableCell>{f.name}</TableCell>
+                      <TableCell>{f.department}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ))}
+        </TabsContent>
+
+        <TabsContent value="sr-sv" className="space-y-4 mt-4">
+          {sessions.map((s, si) => (
+            <div key={si} className="glass-card rounded-xl overflow-hidden">
+              <div className="p-3 border-b border-border bg-muted/30">
+                <span className="font-semibold">{s.exam_date} — {s.session}</span>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow><TableHead>Faculty Name</TableHead><TableHead>Designation</TableHead><TableHead>Experience</TableHead></TableRow>
+                </TableHeader>
+                <TableBody>
+                  {s.seniorSupervisors.map(f => (
+                    <TableRow key={f.faculty_id}>
+                      <TableCell>{f.name}</TableCell>
+                      <TableCell>{f.designation}</TableCell>
+                      <TableCell>{f.experience_years} yrs</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ))}
+        </TabsContent>
+
+        <TabsContent value="squads" className="space-y-4 mt-4">
+          {sessions.map((s, si) => (
+            <div key={si} className="glass-card rounded-xl overflow-hidden">
+              <div className="p-3 border-b border-border bg-muted/30">
+                <span className="font-semibold">{s.exam_date} — {s.session}</span>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Squad</TableHead>
+                    <TableHead>Member 1</TableHead>
+                    <TableHead>Member 2</TableHead>
+                    <TableHead>Member 3</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {s.squads.map(sq => (
+                    <TableRow key={sq.squad}>
+                      <TableCell className="font-bold">{sq.squad}</TableCell>
+                      {[0, 1, 2].map(i => (
+                        <TableCell key={i}>{sq.members[i]?.name || '—'}</TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ))}
         </TabsContent>
 
         <TabsContent value="unalloc" className="glass-card rounded-xl overflow-hidden mt-4">

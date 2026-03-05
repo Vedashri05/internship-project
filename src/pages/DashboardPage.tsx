@@ -14,8 +14,14 @@ const StatCard = ({ icon: Icon, label, value, accent }: { icon: any; label: stri
 );
 
 export default function DashboardPage() {
-  const { faculties, totalStudents, allocationResult } = useAppState();
-  const totalBlocks = totalStudents > 0 ? Math.ceil(totalStudents / 36) : 0;
+  const { faculties, timetableSessions, allocationResult } = useAppState();
+  const totalStudents = timetableSessions.reduce((s, t) => s + t.student_count + t.pwd_students, 0);
+  const totalBlocks = timetableSessions.reduce((s, t) => s + t.total_blocks, 0);
+
+  const allocatedCount = allocationResult
+    ? allocationResult.sessions.reduce((sum, s) =>
+        sum + s.juniorSupervisors.length + s.seniorSupervisors.length + s.squads.reduce((a, sq) => a + sq.members.length, 0), 0)
+    : 0;
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -28,19 +34,17 @@ export default function DashboardPage() {
         <StatCard icon={Users} label="Total Faculty" value={faculties.length} accent="bg-primary/10 text-primary" />
         <StatCard icon={BookOpen} label="Total Students" value={totalStudents || '—'} accent="bg-accent text-accent-foreground" />
         <StatCard icon={LayoutGrid} label="Total Blocks" value={totalBlocks || '—'} accent="bg-success/10 text-success" />
-        <StatCard icon={CheckCircle} label="Allocated" value={allocationResult ? (allocationResult.juniorSupervisors.length + allocationResult.seniorSupervisors.length + allocationResult.squads.reduce((a, s) => a + s.members.length, 0)) : '—'} accent="bg-warning/10 text-warning" />
+        <StatCard icon={CheckCircle} label="Allocated" value={allocatedCount || '—'} accent="bg-warning/10 text-warning" />
       </div>
 
       {allocationResult && (
         <div className="glass-card rounded-xl p-6 space-y-3">
           <h2 className="text-lg font-display font-semibold">Latest Allocation Summary</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-            <div><span className="text-muted-foreground">Jr Supervisors:</span> <strong>{allocationResult.juniorSupervisors.length}</strong></div>
-            <div><span className="text-muted-foreground">Substitutes:</span> <strong>{allocationResult.substituteJrSV.length}</strong></div>
-            <div><span className="text-muted-foreground">Sr Supervisors:</span> <strong>{allocationResult.seniorSupervisors.length}</strong></div>
-            <div><span className="text-muted-foreground">Squads:</span> <strong>{allocationResult.squads.length}</strong></div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+            <div><span className="text-muted-foreground">Sessions:</span> <strong>{allocationResult.sessions.length}</strong></div>
+            <div><span className="text-muted-foreground">Total Jr SV:</span> <strong>{allocationResult.sessions.reduce((s, r) => s + r.juniorSupervisors.length, 0)}</strong></div>
+            <div><span className="text-muted-foreground">Unallocated:</span> <strong>{allocationResult.unallocated.length}</strong></div>
           </div>
-          <p className="text-sm text-muted-foreground">Unallocated: <strong>{allocationResult.unallocated.length}</strong></p>
         </div>
       )}
 

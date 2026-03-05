@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Faculty, FairnessCounter, AllocationResult } from '@/types/exam';
+import { Faculty, FairnessCounter, AllocationResult, TimetableSession } from '@/types/exam';
 
 interface AppState {
   isLoggedIn: boolean;
@@ -15,6 +15,8 @@ interface AppState {
   setCurrentTerm: (t: string) => void;
   totalStudents: number;
   setTotalStudents: (n: number) => void;
+  timetableSessions: TimetableSession[];
+  setTimetableSessions: (s: TimetableSession[]) => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -26,6 +28,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [allocationResult, setAllocationResult] = useState<AllocationResult | null>(null);
   const [currentTerm, setCurrentTerm] = useState('2025-Spring');
   const [totalStudents, setTotalStudents] = useState(0);
+  const [timetableSessions, setTimetableSessions] = useState<TimetableSession[]>([]);
 
   const login = (u: string, p: string) => {
     if (u === 'admin' && p === 'admin123') {
@@ -47,6 +50,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       allocationResult, setAllocationResult,
       currentTerm, setCurrentTerm,
       totalStudents, setTotalStudents,
+      timetableSessions, setTimetableSessions,
     }}>
       {children}
     </AppContext.Provider>
