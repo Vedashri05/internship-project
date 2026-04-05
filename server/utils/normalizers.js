@@ -42,7 +42,18 @@ export function normalizeQualification(value) {
 
 export function normalizeShift(value) {
   const normalized = String(value ?? '').trim().toUpperCase();
-  return normalized === 'E' || normalized.startsWith('E') ? 'E' : 'M';
+  if (!normalized) return 'M';
+  if (
+    normalized === 'E' ||
+    normalized.startsWith('E') ||
+    normalized.includes('EVENING') ||
+    normalized.includes('AFTERNOON') ||
+    normalized.includes('PM') ||
+    normalized === '2'
+  ) {
+    return 'E';
+  }
+  return 'M';
 }
 
 export function toBoolean(value) {
@@ -63,9 +74,36 @@ export function parseExcelDate(value) {
     const jsDate = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
     return jsDate.toISOString().slice(0, 10);
   }
-  const date = new Date(String(value));
+  const normalized = String(value).trim();
+  const dayFirstMatch = normalized.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
+  if (dayFirstMatch) {
+    const [, first, second, yearToken] = dayFirstMatch;
+    const day = Number(first);
+    const month = Number(second);
+    const year = Number(yearToken.length === 2 ? `20${yearToken}` : yearToken);
+    const jsDate = new Date(Date.UTC(year, month - 1, day));
+    if (!Number.isNaN(jsDate.getTime())) {
+      return jsDate.toISOString().slice(0, 10);
+    }
+  }
+
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString().slice(0, 10);
+}
+
+export function parseWholeNumber(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+  }
+
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return 0;
+
+  const match = normalized.match(/-?\d+(\.\d+)?/);
+  if (!match) return 0;
+
+  return Math.max(0, Math.round(Number(match[0]) || 0));
 }
 
 export function calculateExperienceYears(dateOfJoining) {

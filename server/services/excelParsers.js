@@ -4,6 +4,7 @@ import {
   calculateExperienceYears,
   normalizeGender,
   normalizeQualification,
+  parseWholeNumber,
   normalizeRowKeys,
   normalizeShift,
   normalizeTeachingType,
@@ -60,11 +61,15 @@ export function parseScheduleWorkbook(buffer) {
       const row = normalizeRowKeys(originalRow);
 
       return {
-        subject_name: String(valueFromKeys(row, ['subject_name', 'subject'], '')).trim(),
-        block_required: Number(valueFromKeys(row, ['block_required', 'blocks', 'block_count'], 0)) || 0,
-        dept_id: String(valueFromKeys(row, ['dept_id', 'department', 'dept'], 'GEN')).trim().toUpperCase(),
-        exam_date: parseExcelDate(valueFromKeys(row, ['exam_date', 'date'])),
-        shift: normalizeShift(valueFromKeys(row, ['shift', 'session'], 'M')),
+        subject_name: String(
+          valueFromKeys(row, ['subject_name', 'subject', 'subject_code', 'paper_name', 'paper', 'course_name'], '')
+        ).trim(),
+        block_required: parseWholeNumber(
+          valueFromKeys(row, ['block_required', 'blocks', 'block_count', 'required_blocks', 'no_of_blocks', 'rooms', 'hall_count'], 0)
+        ),
+        dept_id: String(valueFromKeys(row, ['dept_id', 'department', 'dept', 'branch', 'programme'], 'GEN')).trim().toUpperCase(),
+        exam_date: parseExcelDate(valueFromKeys(row, ['exam_date', 'date', 'exam_day', 'exam_day_date', 'day_date'])),
+        shift: normalizeShift(valueFromKeys(row, ['shift', 'session', 'time', 'slot'], 'M')),
       };
     })
     .filter((schedule) => schedule.subject_name && schedule.block_required > 0 && schedule.exam_date);

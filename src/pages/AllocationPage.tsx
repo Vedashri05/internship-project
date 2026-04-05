@@ -73,6 +73,10 @@ export default function AllocationPage() {
       toast.error('Enter an examination name before uploading the schedule.');
       return;
     }
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      toast.error('Please upload a valid Excel file.');
+      return;
+    }
     uploadMutation.mutate({ name: examName.trim(), file });
   };
 
@@ -116,7 +120,10 @@ export default function AllocationPage() {
                 type="file"
                 accept=".xlsx,.xls"
                 className="hidden"
-                onChange={(event) => handleScheduleFile(event.target.files?.[0])}
+                onChange={(event) => {
+                  handleScheduleFile(event.target.files?.[0]);
+                  event.currentTarget.value = '';
+                }}
               />
             </div>
           </div>

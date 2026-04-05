@@ -235,7 +235,9 @@ app.post('/api/uploads/schedules', upload.single('file'), asyncHandler(async (re
 
   const scheduleRows = parseScheduleWorkbook(req.file.buffer);
   if (!scheduleRows.length) {
-    return res.status(400).json({ message: 'No valid schedule rows found in the uploaded Excel file.' });
+    return res.status(400).json({
+      message: 'No valid schedule rows were found. Use columns like subject, blocks, department, exam date, and shift, or close variants of those names.',
+    });
   }
 
   const result = await withTransaction(async (connection) => {
