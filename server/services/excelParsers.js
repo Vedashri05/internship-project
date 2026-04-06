@@ -59,14 +59,23 @@ export function parseScheduleWorkbook(buffer) {
   return rows
     .map((originalRow) => {
       const row = normalizeRowKeys(originalRow);
+      const studentCount = parseWholeNumber(
+        valueFromKeys(
+          row,
+          ['student_count', 'students', 'student_strength', 'strength', 'candidate_count', 'no_of_students'],
+          0
+        )
+      );
+      const blockCount = Math.ceil(studentCount / 36) || parseWholeNumber(
+        valueFromKeys(row, ['block_required', 'blocks', 'block_count', 'required_blocks', 'no_of_blocks', 'rooms', 'hall_count'], 0)
+      );
 
       return {
         subject_name: String(
           valueFromKeys(row, ['subject_name', 'subject', 'subject_code', 'paper_name', 'paper', 'course_name'], '')
         ).trim(),
-        block_required: parseWholeNumber(
-          valueFromKeys(row, ['block_required', 'blocks', 'block_count', 'required_blocks', 'no_of_blocks', 'rooms', 'hall_count'], 0)
-        ),
+        student_count: studentCount || blockCount * 36,
+        block_required: blockCount,
         dept_id: String(valueFromKeys(row, ['dept_id', 'department', 'dept', 'branch', 'programme'], 'GEN')).trim().toUpperCase(),
         exam_date: parseExcelDate(valueFromKeys(row, ['exam_date', 'date', 'exam_day', 'exam_day_date', 'day_date'])),
         shift: normalizeShift(valueFromKeys(row, ['shift', 'session', 'time', 'slot'], 'M')),

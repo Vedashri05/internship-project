@@ -53,7 +53,7 @@ export default function ResultsPage() {
     return <div className="glass-card p-6 text-sm text-muted-foreground">Loading examination result...</div>;
   }
 
-  const { exam, summary, sessions, unallocated } = resultQuery.data;
+  const { exam, summary, sessions, unallocated, sr_supervisors: srSupervisors = [] } = resultQuery.data;
 
   return (
     <div className="space-y-6">
@@ -127,6 +127,7 @@ export default function ResultsPage() {
                   <span className="text-sm text-muted-foreground">{session.subject_name}</span>
                   <span className="text-sm text-muted-foreground">{session.dept_id}</span>
                   <span className="text-sm text-muted-foreground">{session.block_required} blocks</span>
+                  {typeof session.student_count === 'number' ? <span className="text-sm text-muted-foreground">{session.student_count} students</span> : null}
                 </div>
               </div>
               <div className="overflow-x-auto px-2 pb-2">
@@ -151,41 +152,47 @@ export default function ResultsPage() {
                   </TableBody>
                 </Table>
               </div>
+              {session.substitutes?.length ? (
+                <div className="border-t border-white/30 px-5 py-4">
+                  <p className="text-sm font-semibold text-foreground">Substitute Junior Supervisors</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {session.substitutes.map((faculty) => faculty.faculty_name).join(', ')}
+                  </p>
+                </div>
+              ) : null}
             </div>
           ))}
         </TabsContent>
 
         <TabsContent value="sr" className="space-y-4">
-          {sessions.map((session) => (
-            <div key={session.schedule_id} className="glass-card overflow-hidden">
-              <div className="border-b border-white/35 bg-white/18 px-5 py-4">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <span className="text-sm font-bold text-foreground">{session.exam_date} | {session.shift}</span>
-                  <span className="text-sm text-muted-foreground">{session.subject_name}</span>
-                </div>
-              </div>
-              <div className="overflow-x-auto px-2 pb-2">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Faculty</TableHead>
-                      <TableHead>Employee Code</TableHead>
-                      <TableHead>Designation</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {session.senior_supervisors.map((item) => (
-                      <TableRow key={`${session.schedule_id}-${item.faculty_id}`} className="border-white/30">
-                        <TableCell className="font-semibold">{item.faculty_name}</TableCell>
-                        <TableCell>{item.employee_code}</TableCell>
-                        <TableCell>{item.designation}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+          <div className="glass-card overflow-hidden">
+            <div className="border-b border-white/35 bg-white/18 px-5 py-4">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span className="text-sm font-bold text-foreground">Global Sr SV Pool</span>
+                <span className="text-sm text-muted-foreground">The same selected senior supervisors are reused across sessions.</span>
               </div>
             </div>
-          ))}
+            <div className="overflow-x-auto px-2 pb-2">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Faculty</TableHead>
+                    <TableHead>Employee Code</TableHead>
+                    <TableHead>Designation</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {srSupervisors.map((item) => (
+                    <TableRow key={item.faculty_id} className="border-white/30">
+                      <TableCell className="font-semibold">{item.faculty_name}</TableCell>
+                      <TableCell>{item.employee_code}</TableCell>
+                      <TableCell>{item.designation}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="squad" className="space-y-4">

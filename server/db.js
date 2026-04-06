@@ -27,6 +27,32 @@ const pool = mysql.createPool({
   decimalNumbers: true,
 });
 
+async function columnExists(connection, tableName, columnName) {
+  const [rows] = await connection.query(
+    `SELECT 1
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = ?
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [databaseConfig.database, tableName, columnName]
+  );
+
+  return rows.length > 0;
+}
+
+async function migrateSchema() {
+  if (!(await columnExists(pool, 'fairness_counter', 'last_allocated_term'))) {
+    await pool.query('ALTER TABLE fairness_counter ADD COLUMN last_allocated_term VARCHAR(255) NULL AFTER total_allocations');
+  }
+
+  if (!(await columnExists(pool, 'exam_schedule', 'student_count'))) {
+    await pool.query('ALTER TABLE exam_schedule ADD COLUMN student_count INT NOT NULL DEFAULT 0 AFTER subject_name');
+  }
+
+  await pool.query("ALTER TABLE allocations MODIFY COLUMN role ENUM('Jr_SV', 'Substitute', 'Sr_SV', 'Squad') NOT NULL");
+}
+
 export async function initDatabase() {
   const bootstrapConnection = await mysql.createConnection({
     host: databaseConfig.host,
@@ -39,6 +65,7 @@ export async function initDatabase() {
   await bootstrapConnection.query(`CREATE DATABASE IF NOT EXISTS \`${databaseConfig.database}\``);
   await bootstrapConnection.end();
   await pool.query(schemaSql);
+  await migrateSchema();
 }
 
 export async function query(sql, params = []) {

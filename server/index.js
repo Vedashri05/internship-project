@@ -32,7 +32,7 @@ async function getExamResult(examId) {
 
   const [exam] = exams;
   const schedules = await query(
-    `SELECT schedule_id, subject_name, block_required, dept_id, exam_date, shift
+    `SELECT schedule_id, subject_name, student_count, block_required, dept_id, exam_date, shift
      FROM exam_schedule
      WHERE exam_id = ?
      ORDER BY exam_date, shift, dept_id, subject_name`,
@@ -53,6 +53,9 @@ async function getExamResult(examId) {
        f.name AS faculty_name,
        f.dept_id,
        f.designation,
+       f.qualification,
+       f.gender,
+       f.experience_years,
        s.subject_name
      FROM allocations a
      INNER JOIN faculties f ON f.faculty_id = a.faculty_id
@@ -63,6 +66,12 @@ async function getExamResult(examId) {
   );
 
   const allocatedFacultyIds = [...new Set(allocations.map((row) => row.faculty_id))];
+  const activeFaculties = await query(
+    `SELECT faculty_id, employee_code, name AS faculty_name, dept_id, designation
+     FROM faculties
+     WHERE is_on_leave = FALSE
+     ORDER BY name`
+  );
   const unallocated = await query(
     `SELECT faculty_id, employee_code, name AS faculty_name, dept_id, designation
      FROM faculties
@@ -72,25 +81,69 @@ async function getExamResult(examId) {
     allocatedFacultyIds
   );
 
+  const srSupervisors = Object.values(
+    allocations
+      .filter((row) => row.role === 'Sr_SV')
+      .reduce((acc, row) => {
+        if (!acc[row.faculty_id]) {
+          acc[row.faculty_id] = {
+            faculty_id: row.faculty_id,
+            faculty_name: row.faculty_name,
+            name: row.faculty_name,
+            employee_code: row.employee_code,
+            dept_id: row.dept_id,
+            designation: row.designation,
+            qualification: row.qualification,
+            experience_years: row.experience_years,
+            gender: row.gender,
+          };
+        }
+        return acc;
+      }, {})
+  );
+
   const sessions = schedules.map((schedule) => ({
     ...schedule,
+    date: schedule.exam_date,
+    subject: schedule.subject_name,
+    blocks: schedule.block_required,
     junior_supervisors: allocations
       .filter((row) => row.schedule_id === schedule.schedule_id && row.role === 'Jr_SV')
       .map((row) => ({
+        block: row.block_number,
         block_number: row.block_number,
         faculty_id: row.faculty_id,
         faculty_name: row.faculty_name,
+        name: row.faculty_name,
         employee_code: row.employee_code,
         dept_id: row.dept_id,
       })),
-    senior_supervisors: allocations
-      .filter((row) => row.schedule_id === schedule.schedule_id && row.role === 'Sr_SV')
+    jr_supervisors: allocations
+      .filter((row) => row.schedule_id === schedule.schedule_id && row.role === 'Jr_SV')
+      .map((row) => ({
+        block: row.block_number,
+        block_number: row.block_number,
+        faculty_id: row.faculty_id,
+        faculty_name: row.faculty_name,
+        name: row.faculty_name,
+        employee_code: row.employee_code,
+        dept_id: row.dept_id,
+      })),
+    substitutes: allocations
+      .filter((row) => row.schedule_id === schedule.schedule_id && row.role === 'Substitute')
       .map((row) => ({
         faculty_id: row.faculty_id,
         faculty_name: row.faculty_name,
+        name: row.faculty_name,
         employee_code: row.employee_code,
+        dept_id: row.dept_id,
         designation: row.designation,
+        qualification: row.qualification,
+        experience_years: row.experience_years,
+        gender: row.gender,
       })),
+    sr_supervisors: srSupervisors,
+    senior_supervisors: srSupervisors,
     squads: Object.values(
       allocations
         .filter((row) => row.schedule_id === schedule.schedule_id && row.role === 'Squad')
@@ -102,20 +155,30 @@ async function getExamResult(examId) {
           acc[key].members.push({
             faculty_id: row.faculty_id,
             faculty_name: row.faculty_name,
+            name: row.faculty_name,
             employee_code: row.employee_code,
             dept_id: row.dept_id,
+            designation: row.designation,
+            qualification: row.qualification,
+            experience_years: row.experience_years,
+            gender: row.gender,
           });
           return acc;
         }, {})
     ),
+    unallocated: activeFaculties.filter((faculty) => {
+      const isAllocatedOnSameDate = allocations.some((row) => row.exam_date === schedule.exam_date && row.faculty_id === faculty.faculty_id);
+      return !isAllocatedOnSameDate;
+    }),
   }));
 
   return {
     exam,
+    sr_supervisors: srSupervisors,
     summary: {
       total_sessions: sessions.length,
       total_junior_supervisors: allocations.filter((row) => row.role === 'Jr_SV').length,
-      total_senior_supervisors: allocations.filter((row) => row.role === 'Sr_SV').length,
+      total_senior_supervisors: srSupervisors.length,
       total_squad_members: allocations.filter((row) => row.role === 'Squad').length,
       total_unallocated: unallocated.length,
     },
@@ -248,11 +311,12 @@ app.post('/api/uploads/schedules', upload.single('file'), asyncHandler(async (re
 
     for (const schedule of scheduleRows) {
       await connection.query(
-        `INSERT INTO exam_schedule (exam_id, subject_name, block_required, dept_id, exam_date, shift)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO exam_schedule (exam_id, subject_name, student_count, block_required, dept_id, exam_date, shift)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           examInsert.insertId,
           schedule.subject_name,
+          schedule.student_count,
           schedule.block_required,
           schedule.dept_id,
           schedule.exam_date,
@@ -289,22 +353,52 @@ app.post('/api/allocations/run', asyncHandler(async (req, res) => {
     }
 
     const [reversalRows] = await connection.query(
-      `SELECT faculty_id, role, COUNT(*) AS allocation_count
+      `SELECT faculty_id, role
        FROM allocations
-       WHERE exam_id = ?
-       GROUP BY faculty_id, role`,
+       WHERE exam_id = ?`,
       [examId]
     );
 
+    const reversalMap = new Map();
     for (const row of reversalRows) {
-      const field = row.role === 'Jr_SV' ? 'jr_sv_count' : row.role === 'Sr_SV' ? 'sr_sv_count' : 'squad_count';
+      if (!reversalMap.has(row.faculty_id)) {
+        reversalMap.set(row.faculty_id, {
+          jr_sv_count: 0,
+          sr_sv_count: 0,
+          squad_count: 0,
+          total_allocations: 0,
+        });
+      }
+
+      const counter = reversalMap.get(row.faculty_id);
+      if (row.role === 'Sr_SV') {
+        counter.sr_sv_count = 1;
+      } else if (row.role === 'Squad') {
+        counter.squad_count += 1;
+        counter.total_allocations += 1;
+      } else {
+        counter.jr_sv_count += 1;
+        counter.total_allocations += 1;
+      }
+    }
+
+    for (const [facultyId, counter] of reversalMap.entries()) {
       await connection.query(
         `UPDATE fairness_counter
-         SET ${field} = GREATEST(${field} - ?, 0),
+         SET jr_sv_count = GREATEST(jr_sv_count - ?, 0),
+             sr_sv_count = GREATEST(sr_sv_count - ?, 0),
+             squad_count = GREATEST(squad_count - ?, 0),
              total_allocations = GREATEST(total_allocations - ?, 0),
+             last_allocated_term = NULL,
              last_allocated_exam = NULL
          WHERE faculty_id = ?`,
-        [row.allocation_count, row.allocation_count, row.faculty_id]
+        [
+          counter.jr_sv_count,
+          counter.sr_sv_count,
+          counter.squad_count,
+          counter.total_allocations + counter.sr_sv_count,
+          facultyId,
+        ]
       );
     }
 
@@ -317,7 +411,7 @@ app.post('/api/allocations/run', asyncHandler(async (req, res) => {
     );
     const [counterRows] = await connection.query('SELECT * FROM fairness_counter');
     const [scheduleRows] = await connection.query(
-      `SELECT schedule_id, exam_id, subject_name, block_required, dept_id, exam_date, shift
+      `SELECT schedule_id, exam_id, subject_name, student_count, block_required, dept_id, exam_date, shift
        FROM exam_schedule
        WHERE exam_id = ?
        ORDER BY exam_date, shift, dept_id, subject_name`,
@@ -353,13 +447,14 @@ app.post('/api/allocations/run', asyncHandler(async (req, res) => {
     for (const counter of generated.counters) {
       await connection.query(
         `INSERT INTO fairness_counter
-           (faculty_id, jr_sv_count, sr_sv_count, squad_count, total_allocations, last_allocated_exam)
-         VALUES (?, ?, ?, ?, ?, ?)
+           (faculty_id, jr_sv_count, sr_sv_count, squad_count, total_allocations, last_allocated_term, last_allocated_exam)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
            jr_sv_count = VALUES(jr_sv_count),
            sr_sv_count = VALUES(sr_sv_count),
            squad_count = VALUES(squad_count),
            total_allocations = VALUES(total_allocations),
+           last_allocated_term = VALUES(last_allocated_term),
            last_allocated_exam = VALUES(last_allocated_exam)`,
         [
           counter.faculty_id,
@@ -367,6 +462,7 @@ app.post('/api/allocations/run', asyncHandler(async (req, res) => {
           counter.sr_sv_count,
           counter.squad_count,
           counter.total_allocations,
+          counter.last_allocated_term,
           counter.last_allocated_exam,
         ]
       );

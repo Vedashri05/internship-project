@@ -18,6 +18,7 @@ export interface FacultyUploadResponse {
 }
 
 export interface SchedulePreview {
+  student_count: number;
   subject_name: string;
   block_required: number;
   dept_id: string;
@@ -70,8 +71,13 @@ export interface SessionJrAllocation {
 export interface SessionSrAllocation {
   faculty_id: number;
   faculty_name: string;
+  name?: string;
   employee_code: string;
   designation: string;
+  qualification?: string;
+  experience_years?: number;
+  gender?: 'M' | 'F' | 'O';
+  dept_id?: string;
 }
 
 export interface SessionSquad {
@@ -79,21 +85,34 @@ export interface SessionSquad {
   members: {
     faculty_id: number;
     faculty_name: string;
+    name?: string;
     employee_code: string;
     dept_id?: string;
+    designation?: string;
+    qualification?: string;
+    experience_years?: number;
+    gender?: 'M' | 'F' | 'O';
   }[];
 }
 
 export interface ExamResultSession {
   schedule_id: number;
+  date?: string;
+  subject?: string;
   subject_name: string;
+  student_count?: number;
+  blocks?: number;
   block_required: number;
   dept_id: string;
   exam_date: string;
   shift: 'M' | 'E';
+  sr_supervisors?: SessionSrAllocation[];
+  jr_supervisors?: SessionJrAllocation[];
   junior_supervisors: SessionJrAllocation[];
   senior_supervisors: SessionSrAllocation[];
+  substitutes?: SessionSrAllocation[];
   squads: SessionSquad[];
+  unallocated?: UnallocatedFaculty[];
 }
 
 export interface UnallocatedFaculty {
@@ -129,6 +148,8 @@ export interface ExamResultResponse {
     total_blocks: number;
     created_at: string;
   };
+  sr_supervisors?: SessionSrAllocation[];
+  senior_supervisors?: SessionSrAllocation[];
   summary: AllocationSummary;
   sessions: ExamResultSession[];
   unallocated: UnallocatedFaculty[];

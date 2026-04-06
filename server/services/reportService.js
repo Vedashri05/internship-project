@@ -1,6 +1,17 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 
+function uniqueRowsByFaculty(rows) {
+  return Object.values(
+    rows.reduce((acc, row) => {
+      if (!acc[row.faculty_id]) {
+        acc[row.faculty_id] = row;
+      }
+      return acc;
+    }, {})
+  );
+}
+
 function groupByFacultyAndSlot(rows, role) {
   const slotMap = new Map();
   const facultyMap = new Map();
@@ -64,7 +75,7 @@ function renderSeniorPdf(doc, title, subtitle, rows) {
   doc.moveDown(0.4);
   doc.font('Helvetica').fontSize(8);
 
-  for (const row of rows.filter((item) => item.role === 'Sr_SV')) {
+  for (const row of uniqueRowsByFaculty(rows.filter((item) => item.role === 'Sr_SV'))) {
     doc.text(
       `${row.faculty_name} | ${row.employee_code} | ${row.exam_date} | ${row.shift} | ${row.subject_name} | ${row.designation}`
     );
@@ -123,7 +134,18 @@ export async function buildExcelReport(exam, detailedRows, unallocatedRows) {
     { header: 'Employee Code', key: 'employee_code', width: 18 },
     { header: 'Designation', key: 'designation', width: 22 },
   ];
-  detailedRows.filter((row) => row.role === 'Sr_SV').forEach((row) => seniorSheet.addRow(row));
+  uniqueRowsByFaculty(detailedRows.filter((row) => row.role === 'Sr_SV')).forEach((row) => seniorSheet.addRow(row));
+
+  const substituteSheet = workbook.addWorksheet('Substitutes');
+  substituteSheet.columns = [
+    { header: 'Date', key: 'exam_date', width: 14 },
+    { header: 'Shift', key: 'shift', width: 10 },
+    { header: 'Subject', key: 'subject_name', width: 28 },
+    { header: 'Faculty', key: 'faculty_name', width: 28 },
+    { header: 'Employee Code', key: 'employee_code', width: 18 },
+    { header: 'Department', key: 'dept_id', width: 14 },
+  ];
+  detailedRows.filter((row) => row.role === 'Substitute').forEach((row) => substituteSheet.addRow(row));
 
   const unallocatedSheet = workbook.addWorksheet('Unallocated');
   unallocatedSheet.columns = [
