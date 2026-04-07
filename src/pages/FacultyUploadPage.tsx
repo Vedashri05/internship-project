@@ -131,6 +131,7 @@ export default function FacultyUploadPage() {
                     <TableHead>Department</TableHead>
                     <TableHead>Role Type</TableHead>
                     <TableHead>Qualification</TableHead>
+                    <TableHead>Date of Joining</TableHead>
                     <TableHead>Experience</TableHead>
                     <TableHead>Leave Status</TableHead>
                   </TableRow>
@@ -148,6 +149,7 @@ export default function FacultyUploadPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>{faculty.qualification}</TableCell>
+                      <TableCell>{faculty.date_of_joining || 'N/A'}</TableCell>
                       <TableCell>{faculty.experience_years} yrs</TableCell>
                       <TableCell>
                         {faculty.is_on_leave ? <X className="h-4 w-4 text-destructive" /> : <Check className="h-4 w-4 text-success" />}

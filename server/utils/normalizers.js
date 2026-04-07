@@ -78,9 +78,33 @@ export function parseExcelDate(value) {
   const dayFirstMatch = normalized.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
   if (dayFirstMatch) {
     const [, first, second, yearToken] = dayFirstMatch;
-    const day = Number(first);
-    const month = Number(second);
-    const year = Number(yearToken.length === 2 ? `20${yearToken}` : yearToken);
+    let val1 = Number(first);
+    let val2 = Number(second);
+    
+    let year = Number(yearToken);
+    if (yearToken.length === 2) {
+      year = year >= 50 ? 1900 + year : 2000 + year;
+    }
+    
+    let day = val1;
+    let month = val2;
+
+    if (val2 > 12) {
+      month = val1;
+      day = val2;
+    } else if (val1 > 12) {
+      day = val1;
+      month = val2;
+    } else {
+      if (normalized.includes('/')) {
+        month = val1;
+        day = val2;
+      } else {
+        day = val1;
+        month = val2;
+      }
+    }
+    
     const jsDate = new Date(Date.UTC(year, month - 1, day));
     if (!Number.isNaN(jsDate.getTime())) {
       return jsDate.toISOString().slice(0, 10);
@@ -111,7 +135,8 @@ export function calculateExperienceYears(dateOfJoining) {
   const today = new Date();
   const joiningDate = new Date(dateOfJoining);
   const diffMs = today.getTime() - joiningDate.getTime();
-  return Math.max(0, Number((diffMs / (365.25 * 24 * 60 * 60 * 1000)).toFixed(2)));
+  const years = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
+  return Math.max(0, years);
 }
 
 export function buildEmployeeCode(rawCode, row, index) {
